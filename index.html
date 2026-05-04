@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+<meta http-equiv="Pragma" content="no-cache" />
+<title>Transformer — How it really works</title>
+<meta name="description" content="An interactive, animated walkthrough of the Transformer architecture: self-attention, multi-head attention, masking, positional encoding, cross-attention, and the full encoder–decoder. For students seeing transformers for the first time." />
+<meta property="og:title" content="How does a Transformer read a sentence?" />
+<meta property="og:description" content="An animated, click-to-step demo of self-attention and the full Transformer — built for first-time learners." />
+<meta property="og:type" content="article" />
+<link rel="icon" href="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'&gt;&lt;circle cx='32' cy='32' r='28' fill='%23ff5470'/&gt;&lt;text x='32' y='44' text-anchor='middle' font-size='34' font-family='-apple-system,Segoe UI,sans-serif' font-weight='800' fill='white'&gt;T&lt;/text&gt;&lt;/svg&gt;" />
+<link rel="stylesheet" href="styles.css?v=20260502" />
+</head>
+<body>
+
+<!-- ============ Side dot navigation ============ -->
+<nav class="dotnav" aria-label="Section navigation">
+  <a href="#title"     data-label="Intro">·</a>
+  <a href="#problem"   data-label="The Problem">·</a>
+  <a href="#intuition" data-label="Intuition">·</a>
+  <a href="#embed"     data-label="Words → Vectors">·</a>
+  <a href="#attn"      data-label="Self-Attention">·</a>
+  <a href="#multihead" data-label="Multi-Head">·</a>
+  <a href="#mask"      data-label="Masking">·</a>
+  <a href="#pos"       data-label="Positional Enc.">·</a>
+  <a href="#cross"     data-label="Cross-Attention">·</a>
+  <a href="#full"      data-label="Full Transformer">·</a>
+  <a href="#summary"   data-label="Summary">·</a>
+</nav>
+
+<!-- ============ Floating control panel (top-right) ============ -->
+<div class="control-panel" aria-label="Demo controls">
+  <button class="ctrl-btn" id="ctrl-pause" title="Pause / resume animations (P)" aria-label="Pause animations">⏸</button>
+  <div class="ctrl-speed">
+    <span class="ctrl-label">Speed</span>
+    <input type="range" id="ctrl-speed" min="0.5" max="2.5" step="0.1" value="1.7" aria-label="Animation speed multiplier" />
+    <span class="ctrl-speed-val" id="ctrl-speed-val">1.7×</span>
+  </div>
+  <button class="ctrl-btn" id="ctrl-help" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
+</div>
+
+<!-- ============ Keyboard help modal (hidden by default) ============ -->
+<div class="modal-backdrop" id="help-modal" hidden>
+  <div class="modal-card" role="dialog" aria-labelledby="help-title">
+    <button class="modal-close" id="help-close" aria-label="Close help">×</button>
+    <h2 id="help-title">Keyboard shortcuts</h2>
+    <div class="kbd-grid">
+      <div><kbd>↓</kbd> / <kbd>Space</kbd></div><div>Next slide</div>
+      <div><kbd>↑</kbd></div><div>Previous slide</div>
+      <div><kbd>→</kbd></div><div>Next step (within slide)</div>
+      <div><kbd>←</kbd></div><div>Previous step</div>
+      <div><kbd>Home</kbd></div><div>First step</div>
+      <div><kbd>End</kbd></div><div>Last step</div>
+      <div><kbd>P</kbd></div><div>Pause / resume animations</div>
+      <div><kbd>?</kbd></div><div>This help screen</div>
+      <div><kbd>Esc</kbd></div><div>Close this dialog</div>
+    </div>
+    <p class="kbd-foot">You can also <b>click any step</b> in the side list to jump to it instantly. Drag the speed slider to adjust pace.</p>
+  </div>
+</div>
+
+<button class="arrow-btn arrow-up"   id="arrow-up"   aria-label="Previous slide">▲</button>
+<button class="arrow-btn arrow-down" id="arrow-down" aria-label="Next slide">▼</button>
+
+<main id="deck">
+
+<!-- ===== SLIDE 0 — TITLE ===== -->
+<section class="slide" id="title">
+  <div class="slide-inner">
+    <div class="title-wrap">
+      <h1>How does a <span class="gradient-text">Transformer</span> read a sentence?</h1>
+      <p class="title-lede">A no-prerequisites walkthrough.<br/>We start with a problem you can't solve without attention, then build it up step by step.</p>
+      <div class="title-preview">
+        <svg viewBox="0 0 800 220" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="g1" x1="0" x2="1">
+              <stop offset="0" stop-color="#a78bd9"/>
+              <stop offset="0.5" stop-color="#f5b87a"/>
+              <stop offset="1" stop-color="#9bc99b"/>
+            </linearGradient>
+          </defs>
+          <g class="title-tokens">
+            <g transform="translate(60,160)">  <rect width="80" height="40" rx="8" fill="#fff" stroke="#14213d"/><text x="40" y="25">The</text></g>
+            <g transform="translate(180,160)"> <rect width="80" height="40" rx="8" fill="#fff" stroke="#14213d"/><text x="40" y="25">animal</text></g>
+            <g transform="translate(300,160)"> <rect width="80" height="40" rx="8" fill="#fff" stroke="#14213d"/><text x="40" y="25">…</text></g>
+            <g transform="translate(420,160)"> <rect width="80" height="40" rx="8" fill="#ffd5dc" stroke="#b31b1b" stroke-width="2"/><text x="40" y="25" font-weight="800">it</text></g>
+          </g>
+          <g class="title-attn">
+            <line x1="100" y1="160" x2="220" y2="160" stroke="url(#g1)" stroke-width="2" opacity="0.3"/>
+            <path d="M 220 160 Q 320 60, 460 160" fill="none" stroke="url(#g1)" stroke-width="3" opacity="0.95"/>
+          </g>
+          <text x="400" y="40" text-anchor="middle" fill="#fff" font-size="14" font-weight="600">"it" pays attention to "animal"</text>
+        </svg>
+      </div>
+      <div class="title-cta">▼ scroll to begin · arrow keys to navigate</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 1 — THE PROBLEM ===== -->
+<section class="slide" id="problem" data-anim="problem">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">1</span>
+      <h2>The problem: words don't make sense alone</h2>
+    </header>
+    <p class="slide-caption">Read this sentence. To understand the word <b>"it"</b>, you have to look at <em>other words</em>. That's the whole idea of attention.</p>
+    <div class="stage" id="problem-stage">
+      <aside class="step-list" id="problem-steps"></aside>
+      <svg id="problem-svg" viewBox="0 0 1200 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="problem">↻ Replay</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 2 — INTUITION (soft DB lookup) ===== -->
+<section class="slide" id="intuition" data-anim="intuition">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">2</span>
+      <h2>The intuition: a fuzzy YouTube search</h2>
+    </header>
+    <p class="slide-caption">Attention is just a <b>soft database lookup</b>. Every word in the sentence does this same search — for itself, against everyone else.</p>
+    <div class="stage" id="intuition-stage">
+      <aside class="step-list" id="intuition-steps"></aside>
+      <svg id="intuition-svg" viewBox="0 0 1200 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="intuition">↻ Replay</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 3 — Embedding + PE primer ===== -->
+<section class="slide" id="embed" data-anim="embed">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">3</span>
+      <h2>First, words become numbers</h2>
+    </header>
+    <div class="big-narration" id="embed-narration">A neural net can't read text — it needs numbers. Each word becomes a list of numbers (an <b>embedding</b>), plus a position tag. Watch the flow.</div>
+    <div class="stage" id="embed-stage">
+      <svg id="embed-svg" viewBox="0 0 1100 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="embed">↻ Replay</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 4 — SELF-ATTENTION (the centerpiece) ===== -->
+<section class="slide" id="attn" data-anim="attn">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">4</span>
+      <h2>Self-Attention — step by step</h2>
+    </header>
+    <div class="big-narration" id="attn-narration">Click ▶ Play to start the animation.</div>
+    <div class="stage" id="attn-stage">
+      <aside class="step-list" id="attn-steps"></aside>
+      <svg id="attn-svg" viewBox="0 0 1200 480" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <span class="who-label">Word being processed:</span>
+      <button class="btn token-pick" data-q="0">I</button>
+      <button class="btn token-pick" data-q="1">like</button>
+      <button class="btn token-pick active" data-q="2">black</button>
+      <button class="btn token-pick" data-q="3">coffee</button>
+      <button class="btn primary" data-replay="attn">▶ Play step by step</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 5 — MULTI-HEAD ===== -->
+<section class="slide" id="multihead" data-anim="multihead">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">5</span>
+      <h2>Multi-Head: many viewpoints at once</h2>
+    </header>
+    <div class="big-narration" id="mh-narration">One attention pattern can only catch one kind of relationship. Real transformers run several attention "heads" in parallel, each free to specialize.</div>
+    <div class="stage" id="mh-stage">
+      <aside class="step-list" id="mh-steps"></aside>
+      <svg id="mh-svg" viewBox="0 0 1200 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="multihead">↻ Replay</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 6 — MASKING ===== -->
+<section class="slide" id="mask" data-anim="mask">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">6</span>
+      <h2>Masking: don't peek at the future</h2>
+    </header>
+    <div class="big-narration" id="mask-narration">When the model is generating text one word at a time, it must not "see" words that haven't been generated yet — otherwise it cheats during training. We <b>mask</b> the future.</div>
+    <div class="stage" id="mask-stage">
+      <aside class="step-list" id="mask-steps"></aside>
+      <svg id="mask-svg" viewBox="0 0 1200 470" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <label class="switch">
+        <input type="checkbox" id="mask-toggle" checked />
+        <span class="slider-track"></span>
+      </label>
+      <span id="mask-toggle-label">Mask future tokens (causal)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 7 — POSITIONAL ENCODING ===== -->
+<section class="slide" id="pos" data-anim="pos">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">7</span>
+      <h2>Positional Encoding: who comes first?</h2>
+    </header>
+    <div class="big-narration">Attention itself is order-blind: it would treat <em>"dog bites man"</em> the same as <em>"man bites dog"</em>. So we <b>add</b> a position-fingerprint to every word — a unique pattern of sines and cosines.</div>
+    <div class="stage" id="pos-stage">
+      <div class="pos-grid">
+        <div class="pos-formula-box">
+          <div class="pos-explainer">
+            <b>Why sin/cos?</b><br/>
+            Each position gets a unique fingerprint at many wavelengths. The model can compare positions just by looking at the pattern.
+          </div>
+          <div class="pos-formula-row">PE(pos, 2i)&nbsp;&nbsp;= sin(pos / 10000<sup>2i / d</sup>)</div>
+          <div class="pos-formula-row">PE(pos, 2i+1) = cos(pos / 10000<sup>2i / d</sup>)</div>
+          <div class="pos-controls-inline">
+            <label>seq_len <input type="range" id="pos-seq" min="4" max="40" value="20" /> <span id="pos-seq-val">20</span></label>
+            <label>d_model <input type="range" id="pos-dim" min="8" max="48" value="32" /> <span id="pos-dim-val">32</span></label>
+          </div>
+        </div>
+        <div class="pos-heatmap-wrap">
+          <div class="pos-axis-x">dimension →</div>
+          <div class="pos-axis-y">position →</div>
+          <div id="pos-heatmap"></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="pos">↻ Replay reveal</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 8 — CROSS-ATTENTION ===== -->
+<section class="slide" id="cross" data-anim="cross">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">8</span>
+      <h2>Cross-Attention: looking back at the source</h2>
+    </header>
+    <div class="big-narration" id="cross-narration">Translation needs the German output to <em>look at</em> the English input. The decoder asks the questions; the encoder provides the answers.</div>
+    <div class="stage" id="cross-stage">
+      <aside class="step-list" id="cross-steps"></aside>
+      <svg id="cross-svg" viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="cross">▶ Play step by step</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 9 — FULL ARCHITECTURE ===== -->
+<section class="slide" id="full" data-anim="full">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">9</span>
+      <h2>Putting it all together</h2>
+    </header>
+    <div class="big-narration" id="full-narration">English in → encoder reads it all at once → decoder writes German <em>one word at a time</em>, peeking back at the encoder for help.</div>
+    <div class="stage" id="full-stage">
+      <aside class="step-list" id="full-steps"></aside>
+      <svg id="full-svg" viewBox="0 0 1200 510" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" data-replay="full">▶ Translate step by step</button>
+      <span class="full-output-tag">Output:</span>
+      <span class="full-output" id="full-output">—</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 10 — SUMMARY / WHAT'S NEXT ===== -->
+<section class="slide" id="summary">
+  <div class="slide-inner">
+    <header class="slide-head">
+      <span class="step-num">10</span>
+      <h2>The whole picture, in one line</h2>
+    </header>
+    <div class="big-narration">All of the math you just watched fits in a single equation. Everything else is plumbing.</div>
+    <div class="stage summary-stage">
+      <div class="summary-grid">
+        <div class="summary-formula">
+          <div class="formula-label">Scaled Dot-Product Attention</div>
+          <div class="formula-eqn">
+            Attention(<span class="tag-q">Q</span>, <span class="tag-k">K</span>, <span class="tag-v">V</span>)
+            &nbsp;=&nbsp;
+            softmax<big>(</big>
+            <span class="frac"><span class="num"><span class="tag-q">Q</span> <span class="tag-k">K</span><sup>⊤</sup></span><span class="den">√d<sub>k</sub></span></span>
+            <big>)</big>&nbsp;<span class="tag-v">V</span>
+          </div>
+          <div class="formula-caption">From <em>Attention Is All You Need</em>, Vaswani et al. 2017.</div>
+        </div>
+        <div class="summary-takeaways">
+          <h3>Key takeaways</h3>
+          <ul>
+            <li><b style="color:var(--q)">Q</b> = "what am I looking for?", <b style="color:var(--k)">K</b> = "what am I?", <b style="color:var(--v)">V</b> = "info I carry."</li>
+            <li>Every word does this lookup against every other word — <b>O(n²)</b> in sequence length.</li>
+            <li><b>Self</b>-attention: Q, K, V all from the same sentence. <b>Cross</b>-attention: Q from decoder, K/V from encoder.</li>
+            <li><b>Mask</b> the future when generating one word at a time, so the model can't peek.</li>
+            <li>Add a <b>positional encoding</b> because raw attention is order-blind.</li>
+            <li><b>Multi-head</b> = the same attention done many times in parallel, each head free to specialize.</li>
+            <li>Residual connections + LayerNorm wrap every sub-layer to keep training stable.</li>
+          </ul>
+        </div>
+        <div class="summary-next">
+          <h3>Where to go next</h3>
+          <ul class="next-links">
+            <li><a target="_blank" rel="noopener" href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> — the original paper</li>
+            <li><a target="_blank" rel="noopener" href="https://jalammar.github.io/illustrated-transformer/">The Illustrated Transformer</a> — Jay Alammar's classic visual guide</li>
+            <li><a target="_blank" rel="noopener" href="https://nlp.seas.harvard.edu/annotated-transformer/">The Annotated Transformer</a> — Harvard NLP, paper + PyTorch code line-by-line</li>
+            <li><a target="_blank" rel="noopener" href="https://huggingface.co/learn/nlp-course">Hugging Face NLP course</a> — hands-on follow-up</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <a class="btn" href="#title">↑ Back to start</a>
+      <a class="btn primary" href="#attn">Replay self-attention</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-foot">
+  Built for Cornell CS Deep Learning · pure HTML / CSS / vanilla JS, no build step.
+  &nbsp;·&nbsp; Inspired by Vaswani et al. 2017 and Jay Alammar's diagrams.
+</footer>
+
+</main>
+
+<script defer src="js/utils.js?v=20260502"></script>
+<script defer src="js/problem.js?v=20260502"></script>
+<script defer src="js/intuition.js?v=20260502"></script>
+<script defer src="js/embed.js?v=20260502"></script>
+<script defer src="js/selfAttention.js?v=20260502"></script>
+<script defer src="js/multiHead.js?v=20260502"></script>
+<script defer src="js/masking.js?v=20260502"></script>
+<script defer src="js/posEncoding.js?v=20260502"></script>
+<script defer src="js/crossAttention.js?v=20260502"></script>
+<script defer src="js/architecture.js?v=20260502"></script>
+<script defer src="js/main.js?v=20260502"></script>
+
+</body>
+</html>
